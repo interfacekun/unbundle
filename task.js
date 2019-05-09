@@ -33,13 +33,15 @@ task.cpScripts = (prj) => {
             if (error) {
                 return;
             }
-
             // 修改脚本
             task.chScripts(prj);
+        }).then(() => {
+            return task.encryptJs(prj);
+        }).then(()=> {
+            Editor.log(`unbundle ${prj} done!`);
         }).catch(e => {
             Editor.error(`cpScripts error`, e);
         })
-
     } catch(e) {
         Editor.error(`cpScripts error`, e);
     }
@@ -70,9 +72,19 @@ task.chScripts = (prj) => {
         utils.copyFile(`${projectPath}/packages/unbundle/res/scripts/main.js`.replace("/", fpath.sep), `${projectPath}/build/${prj}/main.js`.replace("/", fpath.sep));
         utils.copyFile(`${projectPath}/packages/unbundle/res/scripts/src/modular.js`.replace("/", fpath.sep), `${projectPath}/build/${prj}/src/modular.js`.replace("/", fpath.sep));
         
-        // 通过引擎生成setting.js有点麻烦，还是不加密脚本好了，直接读没有加密的settings.js
+
+        let config = fs.readFileSync(`${projectPath}/settings/builder.json`.replace("/", fpath.sep));
+        config = JSON.parse(config);
+
         // 把 settins.js 导出成对象
-        let settings = fs.readFileSync(`${projectPath}/build/${prj}/src/settings.js`.replace("/", fpath.sep)).toString();
+        let settings = "";
+        let  settingsFile = `${projectPath}/build/${prj}/src/settings`.replace("/", fpath.sep);
+        
+        if (config.encryptJs) {
+            utils.decryptJsFile(`${settingsFile}.jsc`, `${settingsFile}.js`, config.xxteaKey, config.zipCompressJs);
+        }
+
+        settings = fs.readFileSync(`${settingsFile}.js`).toString();
         settings = settings.replace(`window._CCSettings=`, "var _CCSettings=");
         settings = settings.replace(`\}\;`, "}; module.exports = _CCSettings;");
         settings = eval(settings);
@@ -83,10 +95,20 @@ task.chScripts = (prj) => {
                     + JSON.stringify(settings).replace(/"([A-Za-z_$][0-9A-Za-z_$]*)":/gm, "$1:") 
                     + ";"
         
-        fs.writeFileSync(`${projectPath}/build/${prj}/src/settings.js`.replace("/", fpath.sep), settings);
-        Editor.log(`unbundle ${prj} done !`);
+        fs.writeFileSync(`${settingsFile}.js`, settings);
     } catch (error) {
         Editor.error(error);
+    }
+}
+
+task.encryptJs = (prj) => {
+
+    let projectPath = Editor.Project.path;
+    let config = fs.readFileSync(`${projectPath}/settings/builder.json`.replace("/", fpath.sep));
+    config = JSON.parse(config);
+    if (config.encryptJs) {
+        let dir = `${projectPath}/build/${prj}/src`.replace("/", fpath.sep);
+        return utils.encryptJsFilesPromise(dir, config.xxteaKey, config.zipCompressJs)
     }
 }
 
